@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Blank SVG Export</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --border: #d7dbe2;
+      --text: #1f2933;
+      --muted: #8795a1;
+      --accent: #ff9533;
+      --accent-hover: #f27f18;
+      --secondary: #e4e7eb;
+      --secondary-hover: #cbd2d9;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; background: var(--bg); color: var(--text); display: flex; height: 100vh; }
+    aside { width: 300px; border-right: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; }
+    main { flex: 1; display: flex; flex-direction: column; background: var(--panel); }
+    header { padding: 16px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .section h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    button { border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 600; border: 1px solid var(--border); cursor: pointer; transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+    button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+    button.primary:hover { background: var(--accent-hover); }
+    button.secondary { background: var(--secondary); border-color: transparent; color: var(--text); }
+    button.secondary:hover { background: var(--secondary-hover); }
+    button.ghost { background: transparent; color: var(--muted); border-color: transparent; }
+    button.ghost:hover { color: var(--text); }
+    input[type=number], input[type=text], select { background: #f0f2f8; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 10px; font-size: 13px; width: 100%; text-align: right; }
+    input[type=number]::placeholder, input[type=text]::placeholder { text-align: left; color: var(--muted); }
+    select { padding: 8px 12px; text-align: left; }
+    .list { flex: 1; overflow: auto; }
+    .list-item { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border); align-items: center; }
+    .list-item .name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .list-item .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .queue { flex: 1; overflow: auto; }
+    .empty { padding: 24px; text-align: center; color: var(--muted); font-style: italic; }
+    .footer { padding: 16px 20px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 20px; background: #f9fafc; }
+    .footer-summary { display: flex; flex-direction: column; gap: 4px; }
+    .summary-primary { font-size: 14px; font-weight: 600; color: var(--text); }
+    .summary-secondary { font-size: 12px; color: var(--muted); }
+    .errors { color: #d64545; font-size: 12px; min-height: 16px; }
+    .footer-controls { display: flex; align-items: center; gap: 12px; }
+    .footer-controls select { width: 160px; min-height: 40px; }
+    .queue-row { display: grid; grid-template-columns: minmax(0,1fr) 96px 96px 40px; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--border); align-items: center; }
+    .queue-row input { text-align: right; }
+  </style>
+</head>
+<body>
+  <aside>
+    <header>
+      <span>Current selection</span>
+      <div style="display:flex; gap:8px;">
+        <button id="refresh" class="secondary">Refresh</button>
+      </div>
+    </header>
+    <div class="list" id="selectionList"></div>
+    <div class="section">
+      <h2>Default dimensions</h2>
+      <div style="display:grid; grid-template-columns: repeat(2,1fr); gap:10px; margin-bottom:12px;">
+        <input type="number" id="globalWidth" placeholder="Width" min="1" />
+        <input type="number" id="globalHeight" placeholder="Height" min="1" />
+      </div>
+      <button id="applyAll" class="secondary" style="width:100%">Apply to queue</button>
+    </div>
+  </aside>
+  <main>
+    <header>
+      <span>Export queue</span>
+      <div style="display:flex; gap:8px;">
+        <button id="clearQueue" class="ghost">Clear queue</button>
+        <button id="close" class="ghost">Close</button>
+      </div>
+    </header>
+    <div class="queue" id="queueList"></div>
+    <div class="footer">
+      <div class="footer-summary">
+        <div id="summaryPrimary" class="summary-primary">Queue is empty</div>
+        <div id="summarySecondary" class="summary-secondary">Select any layer to start.</div>
+        <div id="errors" class="errors"></div>
+      </div>
+      <div class="footer-controls">
+        <select id="exportMode">
+          <option value="zip">Export as .zip</option>
+          <option value="individual">Save individually</option>
+        </select>
+        <button id="export" class="primary" disabled>Export</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script>
+    const selectionList = document.getElementById('selectionList');
+    const queueList = document.getElementById('queueList');
+    const summaryPrimary = document.getElementById('summaryPrimary');
+    const summarySecondary = document.getElementById('summarySecondary');
+    const errorsBox = document.getElementById('errors');
+    const exportBtn = document.getElementById('export');
+    const globalWidth = document.getElementById('globalWidth');
+    const globalHeight = document.getElementById('globalHeight');
+    const exportMode = document.getElementById('exportMode');
+
+    let currentSelection = [];
+    let queue = [];
+
+    function formatBytes(bytes) {
+      if (!bytes) return '—';
+      const units = ['B', 'KB', 'MB'];
+      const base = Math.log(bytes) / Math.log(1024) || 0;
+      const i = Math.min(Math.floor(base), units.length - 1);
+      return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+    }
+
+    function renderSelection() {
+      selectionList.innerHTML = '';
+      if (currentSelection.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'Select any vector or frame to add it to the queue.';
+        selectionList.appendChild(empty);
+        summaryPrimary.textContent = 'Queue is empty';
+        summarySecondary.textContent = 'Select any layer to start.';
+        return;
+      }
+      currentSelection.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'list-item';
+        row.innerHTML = `
+          <div class="name">${item.name}</div>
+          <button data-add="${item.id}" class="primary">Add</button>
+          <button data-focus="${item.id}" class="secondary">Reveal</button>
+        `;
+        row.querySelector('[data-add]').addEventListener('click', () => addToQueue(item));
+        row.querySelector('[data-focus]').addEventListener('click', () => {
+          parent.postMessage({ pluginMessage: { type: 'focus-node', id: item.id } }, '*');
+        });
+        selectionList.appendChild(row);
+      });
+    }
+
+    function renderQueue() {
+      queueList.innerHTML = '';
+      errorsBox.textContent = '';
+      if (queue.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'Queue is empty.';
+        queueList.appendChild(empty);
+        exportBtn.disabled = true;
+        summaryPrimary.textContent = 'Queue is empty';
+        summarySecondary.textContent = 'Add items from the left panel.';
+        return;
+      }
+      let totalSize = 0;
+      queue.forEach((item, index) => {
+        totalSize += item.size || 0;
+        const row = document.createElement('div');
+        row.className = 'queue-row';
+        row.innerHTML = `
+          <div>
+            <div class="name">${item.name}</div>
+            <div class="meta">${formatBytes(item.size)}</div>
+          </div>
+          <input type="number" min="1" placeholder="Width" value="${item.width || ''}" data-idx="${index}" data-key="width" />
+          <input type="number" min="1" placeholder="Height" value="${item.height || ''}" data-idx="${index}" data-key="height" />
+          <button data-remove="${index}" class="ghost" title="Remove">×</button>
+        `;
+        row.querySelector('[data-remove]').addEventListener('click', () => {
+          queue.splice(index, 1);
+          renderQueue();
+        });
+        row.addEventListener('input', event => {
+          const input = event.target;
+          if (!input.dataset.idx) return;
+          const idx = Number(input.dataset.idx);
+          const key = input.dataset.key;
+          const value = input.value ? Number(input.value) : undefined;
+          queue[idx][key] = value;
+        }, true);
+        queueList.appendChild(row);
+      });
+      exportBtn.disabled = false;
+      summaryPrimary.textContent = `${queue.length} item${queue.length > 1 ? 's' : ''}`;
+      summarySecondary.textContent = `${formatBytes(totalSize)} total size`;
+    }
+
+    function addToQueue(item) {
+      if (queue.some(q => q.id === item.id)) return;
+      const entry = { ...item };
+      const w = globalWidth.value ? Number(globalWidth.value) : undefined;
+      const h = globalHeight.value ? Number(globalHeight.value) : undefined;
+      if (w) entry.width = w;
+      if (h) entry.height = h;
+      queue.push(entry);
+      renderQueue();
+    }
+
+    function applyGlobalsToQueue() {
+      const w = globalWidth.value ? Number(globalWidth.value) : undefined;
+      const h = globalHeight.value ? Number(globalHeight.value) : undefined;
+      queue = queue.map(item => ({ ...item, width: w !== undefined ? w : item.width, height: h !== undefined ? h : item.height }));
+      renderQueue();
+    }
+
+    function clearQueue() {
+      queue = [];
+      renderQueue();
+    }
+
+    function injectDimensions(svgText, width, height) {
+      if (width == null && height == null) return svgText;
+      const match = svgText.match(/<svg[^>]*>/i);
+      if (!match) return svgText;
+      let tag = match[0];
+      tag = tag.replace(/\swidth="[^"]*"/i, '');
+      tag = tag.replace(/\sheight="[^"]*"/i, '');
+      const attrs = [];
+      if (width != null) attrs.push(` width="${width}"`);
+      if (height != null) attrs.push(` height="${height}"`);
+      const newTag = tag.replace(/<svg/i, (m) => m + attrs.join(''));
+      return svgText.replace(/<svg[^>]*>/i, newTag);
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 0);
+    }
+
+    async function handleExport(files) {
+      exportBtn.disabled = false;
+      exportBtn.textContent = 'Export';
+      if (!files || files.length === 0) {
+        errorsBox.textContent = 'Nothing was exported.';
+        return;
+      }
+      queue = queue.map(item => {
+        const data = files.find(f => f.id === item.id);
+        return data ? { ...item, size: data.size } : item;
+      });
+      renderQueue();
+
+      if (exportMode.value === 'individual') {
+        for (const item of queue) {
+          const data = files.find(f => f.id === item.id);
+          if (!data) continue;
+          const svg = injectDimensions(data.svgText, item.width, item.height);
+          const blob = new Blob([svg], { type: 'image/svg+xml' });
+          downloadBlob(blob, `${item.name}.svg`);
+        }
+      } else {
+        if (typeof window.JSZip === 'undefined') {
+          errorsBox.textContent = 'JSZip not available. Try individual export.';
+          return;
+        }
+        const zip = new window.JSZip();
+        const folder = zip.folder('svg');
+        for (const item of queue) {
+          const data = files.find(f => f.id === item.id);
+          if (!data) continue;
+          const svg = injectDimensions(data.svgText, item.width, item.height);
+          folder.file(`${item.name}.svg`, svg);
+        }
+        const blob = await zip.generateAsync({ type: 'blob' });
+        downloadBlob(blob, 'blank-svg-export.zip');
+      }
+    }
+
+    function handlePluginMessage(msg) {
+      if (!msg) return;
+      if (msg.type === 'ready') {
+        parent.postMessage({ pluginMessage: { type: 'request-selection' } }, '*');
+      }
+      if (msg.type === 'selection-meta') {
+        currentSelection = msg.items || [];
+        renderSelection();
+      }
+      if (msg.type === 'export-result') {
+        if (msg.errors && msg.errors.length) {
+          errorsBox.textContent = msg.errors.map(e => `${e.id}: ${e.message}`).join(' | ');
+        }
+        handleExport(msg.files || []);
+      }
+    }
+
+    document.getElementById('applyAll').addEventListener('click', applyGlobalsToQueue);
+    document.getElementById('clearQueue').addEventListener('click', clearQueue);
+    document.getElementById('refresh').addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'request-selection' } }, '*');
+    });
+    document.getElementById('close').addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'close-plugin' } }, '*');
+    });
+    exportBtn.addEventListener('click', () => {
+      if (queue.length === 0) return;
+      const payload = queue.map(item => ({ id: item.id, name: item.name }));
+      exportBtn.disabled = true;
+      exportBtn.textContent = 'Exporting...';
+      errorsBox.textContent = '';
+      summaryPrimary.textContent = 'Exporting…';
+      summarySecondary.textContent = '';
+      parent.postMessage({ pluginMessage: { type: 'export-request', items: payload } }, '*');
+    });
+
+    window.addEventListener('message', event => {
+      handlePluginMessage(event.data && event.data.pluginMessage);
+    });
+
+    renderSelection();
+    renderQueue();
+  </script>
+</body>
+</html>
