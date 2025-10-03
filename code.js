@@ -18,7 +18,9 @@ function describeSelection() {
   const selection = figma.currentPage.selection;
   return selection.map(node => ({
     id: node.id,
-    name: sanitizeName(node.name || "untitled")
+    name: sanitizeName(node.name || "untitled"),
+    pxWidth: (node && typeof (node).width === 'number') ? (node).width : undefined,
+    pxHeight: (node && typeof (node).height === 'number') ? (node).height : undefined
   }));
 }
 

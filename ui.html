@@ -65,6 +65,13 @@
         <input type="number" id="globalWidth" placeholder="Width" min="1" />
         <input type="number" id="globalHeight" placeholder="Height" min="1" />
       </div>
+      <div style="display:grid; grid-template-columns: repeat(2,1fr); gap:10px; margin-bottom:12px;">
+        <input type="number" id="dpi" placeholder="DPI" min="1" />
+        <select id="unit">
+          <option value="px">px</option>
+          <option value="in">in</option>
+        </select>
+      </div>
       <button id="applyAll" class="secondary" style="width:100%">Apply to queue</button>
     </div>
   </aside>
@@ -104,9 +111,17 @@
     const globalWidth = document.getElementById('globalWidth');
     const globalHeight = document.getElementById('globalHeight');
     const exportMode = document.getElementById('exportMode');
+    const dpiInput = document.getElementById('dpi');
+    const unitSelect = document.getElementById('unit');
 
     let currentSelection = [];
     let queue = [];
+    let currentUnit = 'px';
+    let currentDpi = 96;
+
+    // initialize defaults for new controls
+    if (dpiInput) dpiInput.value = String(currentDpi);
+    if (unitSelect) unitSelect.value = currentUnit;
 
     function formatBytes(bytes) {
       if (!bytes) return '—';
@@ -192,6 +207,13 @@
     function addToQueue(item) {
       if (queue.some(q => q.id === item.id)) return;
       const entry = { ...item };
+      // if selection has px dimensions, convert to current unit to pre-fill inputs
+      if (item.pxWidth != null) {
+        entry.width = (currentUnit === 'in') ? convert(Number(item.pxWidth), 'px', 'in', currentDpi) : Number(item.pxWidth);
+      }
+      if (item.pxHeight != null) {
+        entry.height = (currentUnit === 'in') ? convert(Number(item.pxHeight), 'px', 'in', currentDpi) : Number(item.pxHeight);
+      }
       const w = globalWidth.value ? Number(globalWidth.value) : undefined;
       const h = globalHeight.value ? Number(globalHeight.value) : undefined;
       if (w) entry.width = w;
@@ -220,10 +242,21 @@
       tag = tag.replace(/\swidth="[^"]*"/i, '');
       tag = tag.replace(/\sheight="[^"]*"/i, '');
       const attrs = [];
-      if (width != null) attrs.push(` width="${width}"`);
-      if (height != null) attrs.push(` height="${height}"`);
+      const u = (currentUnit === 'in') ? 'in' : null; // null -> no suffix (px like hoje)
+      const wVal = (width != null) ? (u ? `${width}${u}` : `${width}`) : null;
+      const hVal = (height != null) ? (u ? `${height}${u}` : `${height}`) : null;
+      if (wVal != null) attrs.push(` width="${wVal}"`);
+      if (hVal != null) attrs.push(` height="${hVal}"`);
       const newTag = tag.replace(/<svg/i, (m) => m + attrs.join(''));
       return svgText.replace(/<svg[^>]*>/i, newTag);
+    }
+
+    function round3(x) { return Math.round(x * 1000) / 1000; }
+    function convert(val, fromUnit, toUnit, dpi) {
+      if (val == null || !isFinite(val) || fromUnit === toUnit) return val;
+      if (fromUnit === 'px' && toUnit === 'in') return round3(val / dpi);
+      if (fromUnit === 'in' && toUnit === 'px') return round3(val * dpi);
+      return val;
     }
 
     function downloadBlob(blob, filename) {
@@ -303,6 +336,29 @@
     document.getElementById('close').addEventListener('click', () => {
       parent.postMessage({ pluginMessage: { type: 'close-plugin' } }, '*');
     });
+    if (dpiInput) {
+      dpiInput.addEventListener('input', () => {
+        const v = Number(dpiInput.value);
+        currentDpi = (isFinite(v) && v > 0) ? v : 96;
+      });
+    }
+    if (unitSelect) {
+      unitSelect.addEventListener('change', () => {
+        const newUnit = unitSelect.value === 'in' ? 'in' : 'px';
+        if (newUnit === currentUnit) return;
+        // convert globals
+        if (globalWidth.value) globalWidth.value = String(convert(Number(globalWidth.value), currentUnit, newUnit, currentDpi));
+        if (globalHeight.value) globalHeight.value = String(convert(Number(globalHeight.value), currentUnit, newUnit, currentDpi));
+        // convert queue
+        queue = queue.map(item => ({
+          ...item,
+          width: (item.width != null) ? convert(Number(item.width), currentUnit, newUnit, currentDpi) : item.width,
+          height: (item.height != null) ? convert(Number(item.height), currentUnit, newUnit, currentDpi) : item.height
+        }));
+        currentUnit = newUnit;
+        renderQueue();
+      });
+    }
     exportBtn.addEventListener('click', () => {
       if (queue.length === 0) return;
       const payload = queue.map(item => ({ id: item.id, name: item.name }));
