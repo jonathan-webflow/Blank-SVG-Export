@@ -118,6 +118,7 @@
     let queue = [];
     let currentUnit = 'px';
     let currentDpi = 96;
+    let isSyncingInputs = false; // evita loop de eventos ao sincronizar W/H
 
     // initialize defaults for new controls
     if (dpiInput) dpiInput.value = String(currentDpi);
@@ -189,13 +190,34 @@
           queue.splice(index, 1);
           renderQueue();
         });
+        // Sincroniza proporções: sempre mantém ratio = width/height quando existir
         row.addEventListener('input', event => {
+          if (isSyncingInputs) return;
           const input = event.target;
           if (!input.dataset.idx) return;
           const idx = Number(input.dataset.idx);
-          const key = input.dataset.key;
+          const key = input.dataset.key; // 'width' | 'height'
           const value = input.value ? Number(input.value) : undefined;
           queue[idx][key] = value;
+
+          const ratio = queue[idx].ratio;
+          if (!ratio || !isFinite(ratio) || value == null) return;
+
+          // calcula o outro lado com arredondamento inteiro
+          const otherKey = key === 'width' ? 'height' : 'width';
+          isSyncingInputs = true;
+          if (key === 'width') {
+            const newH = Math.round(value / ratio);
+            queue[idx].height = newH;
+            const otherInput = row.querySelector(`input[data-idx="${idx}"][data-key="height"]`);
+            if (otherInput) otherInput.value = String(newH);
+          } else {
+            const newW = Math.round(value * ratio);
+            queue[idx].width = newW;
+            const otherInput = row.querySelector(`input[data-idx="${idx}"][data-key="width"]`);
+            if (otherInput) otherInput.value = String(newW);
+          }
+          isSyncingInputs = false;
         }, true);
         queueList.appendChild(row);
       });
@@ -214,10 +236,17 @@
       if (item.pxHeight != null) {
         entry.height = (currentUnit === 'in') ? convert(Number(item.pxHeight), 'px', 'in', currentDpi) : Number(item.pxHeight);
       }
+      // calcula e fixa a razão sempre que possível
+      if (entry.width != null && entry.height != null && isFinite(entry.width) && isFinite(entry.height) && entry.height !== 0) {
+        entry.ratio = Number(entry.width) / Number(entry.height);
+      }
       const w = globalWidth.value ? Number(globalWidth.value) : undefined;
       const h = globalHeight.value ? Number(globalHeight.value) : undefined;
       if (w) entry.width = w;
       if (h) entry.height = h;
+      if (entry.width != null && entry.height != null && entry.height !== 0) {
+        entry.ratio = Number(entry.width) / Number(entry.height);
+      }
       queue.push(entry);
       renderQueue();
     }
@@ -225,7 +254,13 @@
     function applyGlobalsToQueue() {
       const w = globalWidth.value ? Number(globalWidth.value) : undefined;
       const h = globalHeight.value ? Number(globalHeight.value) : undefined;
-      queue = queue.map(item => ({ ...item, width: w !== undefined ? w : item.width, height: h !== undefined ? h : item.height }));
+      queue = queue.map(item => {
+        const next = { ...item, width: w !== undefined ? w : item.width, height: h !== undefined ? h : item.height };
+        if (next.width != null && next.height != null && next.height !== 0 && isFinite(next.width) && isFinite(next.height)) {
+          next.ratio = Number(next.width) / Number(next.height);
+        }
+        return next;
+      });
       renderQueue();
     }
 
