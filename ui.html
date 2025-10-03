@@ -46,8 +46,9 @@
     .errors { color: #d64545; font-size: 12px; min-height: 16px; }
     .footer-controls { display: flex; align-items: center; gap: 12px; }
     .footer-controls select { width: 160px; min-height: 40px; }
-    .queue-row { display: grid; grid-template-columns: minmax(0,1fr) 96px 96px 40px; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--border); align-items: center; }
+    .queue-row { display: grid; grid-template-columns: minmax(0,1fr) 96px auto 96px auto 40px; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--border); align-items: center; }
     .queue-row input { text-align: right; }
+    .unit-suffix, .unit-label { font-size: 12px; color: var(--muted); align-self: center; }
   </style>
 </head>
 <body>
@@ -65,12 +66,14 @@
         <input type="number" id="globalWidth" placeholder="Width" min="1" />
         <input type="number" id="globalHeight" placeholder="Height" min="1" />
       </div>
-      <div style="display:grid; grid-template-columns: repeat(2,1fr); gap:10px; margin-bottom:12px;">
+      <div style="display:grid; grid-template-columns: 1fr auto 1fr auto; gap:10px; margin-bottom:12px; align-items:center;">
         <input type="number" id="dpi" placeholder="DPI" min="1" />
+        <span class="unit-label">DPI</span>
         <select id="unit">
           <option value="px">px</option>
           <option value="in">in</option>
         </select>
+        <span class="unit-label">Unit</span>
       </div>
       <button id="applyAll" class="secondary" style="width:100%">Apply to queue</button>
     </div>
@@ -183,7 +186,9 @@
             <div class="meta">${formatBytes(item.size)}</div>
           </div>
           <input type="number" min="1" placeholder="Width" value="${item.width || ''}" data-idx="${index}" data-key="width" />
+          <span class="unit-suffix">${currentUnit === 'in' ? 'in' : 'px'}</span>
           <input type="number" min="1" placeholder="Height" value="${item.height || ''}" data-idx="${index}" data-key="height" />
+          <span class="unit-suffix">${currentUnit === 'in' ? 'in' : 'px'}</span>
           <button data-remove="${index}" class="ghost" title="Remove">×</button>
         `;
         row.querySelector('[data-remove]').addEventListener('click', () => {
@@ -391,7 +396,7 @@
           height: (item.height != null) ? convert(Number(item.height), currentUnit, newUnit, currentDpi) : item.height
         }));
         currentUnit = newUnit;
-        renderQueue();
+        renderQueue(); // re-render para atualizar sufixos visuais
       });
     }
     exportBtn.addEventListener('click', () => {
