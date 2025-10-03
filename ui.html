@@ -135,6 +135,13 @@
       return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
     }
 
+    // Exibição com no máximo 2 casas decimais (mantém valor numérico completo internamente)
+    // Usamos Number(val).toFixed(2) e parseFloat para remover zeros finais (ex.: 275.10 -> 275.1)
+    function format2(val) {
+      if (val == null || !isFinite(val)) return '';
+      return String(parseFloat(Number(val).toFixed(2)));
+    }
+
     function renderSelection() {
       selectionList.innerHTML = '';
       if (currentSelection.length === 0) {
@@ -185,9 +192,9 @@
             <div class="name">${item.name}</div>
             <div class="meta">${formatBytes(item.size)}</div>
           </div>
-          <input type="number" min="1" placeholder="Width" value="${item.width || ''}" data-idx="${index}" data-key="width" />
+          <input type="number" min="1" placeholder="Width" value="${format2(item.width)}" data-idx="${index}" data-key="width" />
           <span class="unit-suffix">${currentUnit === 'in' ? 'in' : 'px'}</span>
-          <input type="number" min="1" placeholder="Height" value="${item.height || ''}" data-idx="${index}" data-key="height" />
+          <input type="number" min="1" placeholder="Height" value="${format2(item.height)}" data-idx="${index}" data-key="height" />
           <span class="unit-suffix">${currentUnit === 'in' ? 'in' : 'px'}</span>
           <button data-remove="${index}" class="ghost" title="Remove">×</button>
         `;
@@ -215,12 +222,12 @@
             const newH = Math.round(value / ratio);
             queue[idx].height = newH;
             const otherInput = row.querySelector(`input[data-idx="${idx}"][data-key="height"]`);
-            if (otherInput) otherInput.value = String(newH);
+            if (otherInput) otherInput.value = format2(newH); // formata somente para exibição
           } else {
             const newW = Math.round(value * ratio);
             queue[idx].width = newW;
             const otherInput = row.querySelector(`input[data-idx="${idx}"][data-key="width"]`);
-            if (otherInput) otherInput.value = String(newW);
+            if (otherInput) otherInput.value = format2(newW); // formata somente para exibição
           }
           isSyncingInputs = false;
         }, true);
