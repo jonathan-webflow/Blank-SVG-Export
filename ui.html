@@ -96,6 +96,7 @@
       <div class="footer-controls">
         <select id="exportMode">
           <option value="zip">Batch export (.zip)</option>
+          <option value="folder">Save to folder</option>
           <option value="individual">Individual files</option>
         </select>
         <button id="export" class="primary" disabled>Export</button>
@@ -332,7 +333,32 @@
       });
       renderQueue();
 
-      if (exportMode.value === 'individual') {
+      if (exportMode.value === 'folder') {
+        // File System Access API - save all files to a user-selected folder
+        if (!window.showDirectoryPicker) {
+          errorsBox.textContent = 'Folder export not supported. Use .zip or individual.';
+          return;
+        }
+        try {
+          const dirHandle = await window.showDirectoryPicker();
+          for (const item of queue) {
+            const data = files.find(f => f.id === item.id);
+            if (!data) continue;
+            const svg = injectDimensions(data.svgText, item.width, item.height);
+            const fileHandle = await dirHandle.getFileHandle(`${item.name}.svg`, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(svg);
+            await writable.close();
+          }
+        } catch (err) {
+          const message = err && err.message ? err.message : String(err);
+          if (message.includes('aborted')) {
+            errorsBox.textContent = 'Export cancelled.';
+          } else {
+            errorsBox.textContent = 'Error saving to folder: ' + message;
+          }
+        }
+      } else if (exportMode.value === 'individual') {
         for (const item of queue) {
           const data = files.find(f => f.id === item.id);
           if (!data) continue;
